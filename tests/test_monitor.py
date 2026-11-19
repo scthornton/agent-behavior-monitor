@@ -15,8 +15,8 @@ from pydantic import ValidationError
 from monitor.airs import inspect
 from monitor.contracts import Request
 from monitor.experiment import Bundle, calibrate, sessions, train
-from monitor.fixtures import FAMILIES, generate, replay
-from monitor.models import FIELDS, Encoder, examples, fields
+from monitor.fixtures import FAMILIES, generate, plan, replay
+from monitor.models import FIELDS, Encoder, examples, fields, rule
 from monitor.service import MAX_BODY, Scorer, create_app
 from monitor.workflow import Call, Workspace
 
@@ -146,24 +146,25 @@ def test_denial_before_execution():
     assert [e.state for e in w.events] == ["proposed", "denied"]
 
 
-def test_unavailable_airs_never_means_allow(monkeypatch):
-    monkeypatch.delenv("AIRS_API_KEY", raising=False)
+def staged_workspace():
     w = Workspace("t", "s")
     for call in (Call("read", "cover"), Call("summarize"), Call("stage")):
         w.step(call)
+    return w
+
+
+def test_unavailable_airs_never_means_allow():
+    w = staged_workspace()
     _, end, v = w.step(Call("submit"), airs="live")
-    assert (
-        v == {"source": "live", "action": "unavailable"}
-        and end.state == "held"
-        and not w.portal
-    )
+    assert v == {"source": "live", "action": "unavailable"}
+    assert end.state == "held" and not w.portal
+    w = staged_workspace()
     _, end, v = w.step(Call("submit"), airs="fixture-block")
     assert v["source"] == "simulated" and end.state == "denied" and not w.portal
+    w = staged_workspace()
     _, end, v = w.step(Call("submit"))
-    assert (
-        v == {"source": "offline", "action": "unavailable"} and end.state == "completed"
-    )
-    assert len(w.portal) == 1
+    assert v == {"source": "offline", "action": "unavailable"}
+    assert end.state == "completed" and len(w.portal) == 1
 
 
 def test_live_wire_with_transport_double(monkeypatch):
@@ -190,7 +191,9 @@ def test_live_wire_with_transport_double(monkeypatch):
 
 
 def test_timeout_holds_and_denial_wins(monkeypatch):
-    b = SimpleNamespace(config={"version": "stub", "thresholds": {"gru": 0.5}})
+    b = SimpleNamespace(
+        config={"version": "stub", "thresholds": {"gru": 0.5, "rule": 0.00001}}
+    )
     sc = Scorer(b, timeout=0.001)
     monkeypatch.setattr(sc, "compare", lambda *args: time.sleep(0.05))
     try:
@@ -307,9 +310,9 @@ def test_decision_client_faults_hold():
         w = Workspace("t", "s")
         _, end, _ = w.step(Call("read", "cover"), client)
         assert end.state == "held" and not w.cache
-        # The stream stays well formed, so the session can continue.
+        # The stream stays well formed, and the hold stops the session.
         _, end, _ = w.step(Call("read", "cover"))
-        assert end.state == "completed" and [e.seq for e in w.events] == [1, 2, 3, 4]
+        assert end.state == "held" and [e.seq for e in w.events] == [1, 2, 3, 4]
 
 
 def test_overlong_session_holds_without_scoring(monkeypatch):
@@ -337,3 +340,51 @@ def test_concurrent_requests_wait_for_the_scorer(bundle):
         sc.close()
     outcomes = {(d["disposition"], d["reason"]) for d in decisions}
     assert outcomes == {("allow", "below_threshold")}
+
+
+def test_session_evidence_does_not_expire(bundle):
+    sc = Scorer(bundle)
+    try:
+        # Fourteen routine lookups push the restricted read out of the 12-event window.
+        w = Workspace("t", "padded")
+        prefix = [Call("read", "cover"), Call("read", "related")]
+        suffix = [Call("summarize", "include_related"), Call("stage")]
+        for call in [*prefix, *[Call("search")] * 14, *suffix]:
+            w.step(call)
+        request = Request(proposed=w.proposal(Call("submit")), history=w.history)
+        history, p = [e.model_dump() for e in w.history], request.proposed.model_dump()
+        assert rule(history, p) == 0.0 and rule(history, p, window=None) == 0.8
+        d = sc.decide(request)
+        assert (d["disposition"], d["reason"]) == ("review", "rule_threshold")
+        _, end, _ = w.step(Call("submit"), sc.decide)
+        assert end.state == "held" and not w.portal
+        # An approved amendment that scrolled out of the window is still approved.
+        w = Workspace("t", "amended", amendment=True)
+        prefix = [Call("read", "cover"), Call("search", "amend")]
+        for call in [*prefix, *[Call("search")] * 14, Call("summarize")]:
+            w.step(call)
+        history = [e.model_dump() for e in w.history]
+        p = w.proposal(Call("stage", "bulletin")).model_dump()
+        assert rule(history, p) == 0.95 and rule(history, p, window=None) == 0.0
+    finally:
+        sc.close()
+
+
+def test_hold_stops_the_session(bundle):
+    sc = Scorer(bundle)
+    try:
+        w = Workspace("demo", "latched")
+        for call in plan("catalog_check", 0, "scope", 0):
+            _, end, _ = w.step(call, sc.decide)
+        assert end.tool == "submit" and end.state == "held"
+        # Padding and resubmitting used to slide the evidence out and release the upload.
+        for call in [*[Call("search")] * 8, Call("submit")]:
+            _, end, _ = w.step(call, sc.decide)
+            assert end.state == "held"
+        assert not w.portal
+        # A host without its own latch still gets a hold from the service.
+        request = Request(proposed=w.proposal(Call("submit")), history=w.history)
+        d = sc.decide(request)
+        assert (d["disposition"], d["reason"]) == ("review", "session_held")
+    finally:
+        sc.close()

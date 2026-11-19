@@ -11,9 +11,17 @@ from fastapi.responses import JSONResponse
 
 from .contracts import WINDOW, Request
 from .experiment import Bundle
-from .models import NAMES
+from .models import NAMES, rule
 
 MAX_BODY = 1_000_000  # bytes. A full 1,024-event history is about a quarter of this.
+
+
+def latched(history):
+    """A review hold or a content block stops a session. A permission denial does not."""
+    return any(
+        e.state == "held" or (e.state == "denied" and e.permission == "allow")
+        for e in history
+    )
 
 
 class Scorer:
@@ -45,29 +53,41 @@ class Scorer:
 
     def decide(self, request: Request):
         p = request.proposed.model_dump()
-        history = [e.model_dump() for e in request.history[-WINDOW:]]
+        session = [e.model_dump() for e in request.history]
+        history = session[-WINDOW:]
         cfg = self.bundle.config
         response = {
             "model_version": cfg["version"],
             "score": None,
             "scores": {},
+            "session_rule": None,
             "thresholds": cfg["thresholds"],
             "evidence": history,
         }
-        reason = "history_incomplete"
-        if request.complete:
-            values, reason = self.bounded(history, p)
-            if values is not None:
+        reasons = []
+        if not request.complete:
+            reasons.append("history_incomplete")
+        else:
+            # Session state never expires. The four windowed scores are the matched
+            # comparison from the experiment and lose evidence older than WINDOW.
+            if latched(request.history):
+                reasons.append("session_held")
+            response["session_rule"] = rule(session, p, window=None)
+            if response["session_rule"] >= cfg["thresholds"]["rule"]:
+                reasons.append("rule_threshold")
+            values, fault = self.bounded(history, p)
+            if values is None:
+                reasons.append(fault)
+            else:
                 response.update(score=values["gru"], scores=values)
-                reason = (
-                    "behavior_threshold"
-                    if values["gru"] >= cfg["thresholds"]["gru"]
-                    else "below_threshold"
-                )
-        disposition = "allow" if reason == "below_threshold" else "review"
+                if values["gru"] >= cfg["thresholds"]["gru"]:
+                    reasons.append("behavior_threshold")
+        # The rules are the floor. The model can add a hold and never removes one.
+        disposition = "review" if reasons else "allow"
+        reason = reasons[0] if reasons else "below_threshold"
         if p["permission"] == "deny":
             reason, disposition = "permission_denied", "deny"
-        return dict(**response, disposition=disposition, reason=reason)
+        return dict(**response, disposition=disposition, reason=reason, reasons=reasons)
 
 
 class BodyLimit:
