@@ -1,0 +1,8 @@
+{
+  "scope": "localhost HTTP, four detectors, full history transport, sequential",
+  "seed": 1741,
+  "warmup": 20,
+  "samples": 240,
+  "p50_ms": 6.0761975,
+  "p95_ms": 9.7076908
+}

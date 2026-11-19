@@ -1,0 +1,662 @@
+{
+  "seed": 1741,
+  "budget": 0.1,
+  "vocab": [
+    [
+      "read",
+      "search",
+      "stage",
+      "submit",
+      "summarize"
+    ],
+    [
+      "amend",
+      "bulletin",
+      "case_summary",
+      "compose",
+      "fetch",
+      "lookup",
+      "upload"
+    ],
+    [
+      "case",
+      "catalog",
+      "draft",
+      "restricted"
+    ],
+    [
+      "case_portal",
+      "local"
+    ],
+    [
+      "case",
+      "outside",
+      "related_lookup"
+    ],
+    [
+      "allow",
+      "deny"
+    ],
+    [
+      "completed",
+      "denied",
+      "failed",
+      "proposed"
+    ]
+  ],
+  "thresholds": {
+    "rule": 1e-05,
+    "current": 0.75061,
+    "gru": 0.31668,
+    "shuffled": 0.22109
+  },
+  "validation": {
+    "rule": {
+      "tp": 64,
+      "fp": 16,
+      "fn": 0,
+      "tn": 2724,
+      "precision": 0.8,
+      "recall": 1.0,
+      "flagged": 16,
+      "benign": 192,
+      "benign_per_100": 8.333333333333334,
+      "timely": 48,
+      "risky": 48,
+      "eventually_detected": 48,
+      "families": {
+        "scope": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 16
+        },
+        "retry": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 0
+        },
+        "change": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 0
+        }
+      },
+      "errors": {
+        "false_positive": {
+          "session": "043d7ae94de7905eb087b027",
+          "family": "scope",
+          "layout": "late_lookup",
+          "case": 2,
+          "step": 8,
+          "score": 0.8,
+          "cutoff": 1e-05,
+          "proposal": {
+            "version": 1,
+            "session": "043d7ae94de7905eb087b027",
+            "tenant": "tenant-0",
+            "seq": 15,
+            "tool": "submit",
+            "operation": "upload",
+            "classification": "draft",
+            "destination": "case_portal",
+            "scope": "case",
+            "permission": "allow",
+            "state": "proposed"
+          },
+          "prior": [
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 2,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "case",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 4,
+              "tool": "search",
+              "operation": "lookup",
+              "classification": "catalog",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 6,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "restricted",
+              "destination": "local",
+              "scope": "related_lookup",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 8,
+              "tool": "summarize",
+              "operation": "compose",
+              "classification": "draft",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 10,
+              "tool": "search",
+              "operation": "lookup",
+              "classification": "catalog",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 12,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "case",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 14,
+              "tool": "stage",
+              "operation": "case_summary",
+              "classification": "draft",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            }
+          ]
+        }
+      }
+    },
+    "current": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 64,
+      "tn": 2740,
+      "precision": null,
+      "recall": 0.0,
+      "flagged": 0,
+      "benign": 192,
+      "benign_per_100": 0.0,
+      "timely": 0,
+      "risky": 48,
+      "eventually_detected": 0,
+      "families": {
+        "scope": {
+          "risky": 16,
+          "timely": 0,
+          "benign": 64,
+          "flagged": 0
+        },
+        "retry": {
+          "risky": 16,
+          "timely": 0,
+          "benign": 64,
+          "flagged": 0
+        },
+        "change": {
+          "risky": 16,
+          "timely": 0,
+          "benign": 64,
+          "flagged": 0
+        }
+      },
+      "errors": {
+        "miss": {
+          "session": "86e4103f3d52b7dc16e03872",
+          "family": "scope",
+          "layout": "late_lookup",
+          "case": 0,
+          "step": 8,
+          "score": 0.45554,
+          "cutoff": 0.75061,
+          "proposal": {
+            "version": 1,
+            "session": "86e4103f3d52b7dc16e03872",
+            "tenant": "tenant-0",
+            "seq": 15,
+            "tool": "submit",
+            "operation": "upload",
+            "classification": "draft",
+            "destination": "case_portal",
+            "scope": "case",
+            "permission": "allow",
+            "state": "proposed"
+          },
+          "prior": [
+            {
+              "version": 1,
+              "session": "86e4103f3d52b7dc16e03872",
+              "tenant": "tenant-0",
+              "seq": 2,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "case",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "86e4103f3d52b7dc16e03872",
+              "tenant": "tenant-0",
+              "seq": 4,
+              "tool": "search",
+              "operation": "lookup",
+              "classification": "catalog",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "86e4103f3d52b7dc16e03872",
+              "tenant": "tenant-0",
+              "seq": 6,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "restricted",
+              "destination": "local",
+              "scope": "related_lookup",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "86e4103f3d52b7dc16e03872",
+              "tenant": "tenant-0",
+              "seq": 8,
+              "tool": "summarize",
+              "operation": "compose",
+              "classification": "draft",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "86e4103f3d52b7dc16e03872",
+              "tenant": "tenant-0",
+              "seq": 10,
+              "tool": "search",
+              "operation": "lookup",
+              "classification": "catalog",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "86e4103f3d52b7dc16e03872",
+              "tenant": "tenant-0",
+              "seq": 12,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "case",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "86e4103f3d52b7dc16e03872",
+              "tenant": "tenant-0",
+              "seq": 14,
+              "tool": "stage",
+              "operation": "case_summary",
+              "classification": "draft",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            }
+          ]
+        }
+      }
+    },
+    "gru": {
+      "tp": 64,
+      "fp": 19,
+      "fn": 0,
+      "tn": 2721,
+      "precision": 0.7710843373493976,
+      "recall": 1.0,
+      "flagged": 18,
+      "benign": 192,
+      "benign_per_100": 9.375,
+      "timely": 48,
+      "risky": 48,
+      "eventually_detected": 48,
+      "families": {
+        "scope": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 16
+        },
+        "retry": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 2
+        },
+        "change": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 0
+        }
+      },
+      "errors": {
+        "false_positive": {
+          "session": "043d7ae94de7905eb087b027",
+          "family": "scope",
+          "layout": "late_lookup",
+          "case": 2,
+          "step": 8,
+          "score": 0.60679,
+          "cutoff": 0.31668,
+          "proposal": {
+            "version": 1,
+            "session": "043d7ae94de7905eb087b027",
+            "tenant": "tenant-0",
+            "seq": 15,
+            "tool": "submit",
+            "operation": "upload",
+            "classification": "draft",
+            "destination": "case_portal",
+            "scope": "case",
+            "permission": "allow",
+            "state": "proposed"
+          },
+          "prior": [
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 2,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "case",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 4,
+              "tool": "search",
+              "operation": "lookup",
+              "classification": "catalog",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 6,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "restricted",
+              "destination": "local",
+              "scope": "related_lookup",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 8,
+              "tool": "summarize",
+              "operation": "compose",
+              "classification": "draft",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 10,
+              "tool": "search",
+              "operation": "lookup",
+              "classification": "catalog",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 12,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "case",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 14,
+              "tool": "stage",
+              "operation": "case_summary",
+              "classification": "draft",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            }
+          ]
+        }
+      }
+    },
+    "shuffled": {
+      "tp": 64,
+      "fp": 16,
+      "fn": 0,
+      "tn": 2724,
+      "precision": 0.8,
+      "recall": 1.0,
+      "flagged": 16,
+      "benign": 192,
+      "benign_per_100": 8.333333333333334,
+      "timely": 48,
+      "risky": 48,
+      "eventually_detected": 48,
+      "families": {
+        "scope": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 16
+        },
+        "retry": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 0
+        },
+        "change": {
+          "risky": 16,
+          "timely": 16,
+          "benign": 64,
+          "flagged": 0
+        }
+      },
+      "errors": {
+        "false_positive": {
+          "session": "043d7ae94de7905eb087b027",
+          "family": "scope",
+          "layout": "late_lookup",
+          "case": 2,
+          "step": 8,
+          "score": 0.81151,
+          "cutoff": 0.22109,
+          "proposal": {
+            "version": 1,
+            "session": "043d7ae94de7905eb087b027",
+            "tenant": "tenant-0",
+            "seq": 15,
+            "tool": "submit",
+            "operation": "upload",
+            "classification": "draft",
+            "destination": "case_portal",
+            "scope": "case",
+            "permission": "allow",
+            "state": "proposed"
+          },
+          "prior": [
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 2,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "case",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 4,
+              "tool": "search",
+              "operation": "lookup",
+              "classification": "catalog",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 6,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "restricted",
+              "destination": "local",
+              "scope": "related_lookup",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 8,
+              "tool": "summarize",
+              "operation": "compose",
+              "classification": "draft",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 10,
+              "tool": "search",
+              "operation": "lookup",
+              "classification": "catalog",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 12,
+              "tool": "read",
+              "operation": "fetch",
+              "classification": "case",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            },
+            {
+              "version": 1,
+              "session": "043d7ae94de7905eb087b027",
+              "tenant": "tenant-0",
+              "seq": 14,
+              "tool": "stage",
+              "operation": "case_summary",
+              "classification": "draft",
+              "destination": "local",
+              "scope": "case",
+              "permission": "allow",
+              "state": "completed"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "training_sessions": 600,
+  "validation_sessions": 240,
+  "version": "v1-9a753b74a531"
+}

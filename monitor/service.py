@@ -1,9 +1,12 @@
 """Local pre-dispatch scoring endpoint, shared with the replay host."""
+
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from contextlib import asynccontextmanager
 from threading import BoundedSemaphore
+
 from fastapi import FastAPI
-from .contracts import Request, WINDOW
+
+from .contracts import WINDOW, Request
 from .experiment import Bundle
 from .models import NAMES
 
@@ -25,8 +28,13 @@ class Scorer:
         p = request.proposed.model_dump()
         history = [e.model_dump() for e in request.history[-WINDOW:]]
         cfg = self.bundle.config
-        response = dict(model_version=cfg["version"], score=None, scores={},
-                        thresholds=cfg["thresholds"], evidence=history)
+        response = {
+            "model_version": cfg["version"],
+            "score": None,
+            "scores": {},
+            "thresholds": cfg["thresholds"],
+            "evidence": history,
+        }
         reason = "history_incomplete"
         if request.complete:
             reason = "scorer_busy"
@@ -39,7 +47,11 @@ class Scorer:
                     reason = "scorer_timeout"
                 else:
                     response.update(score=values["gru"], scores=values)
-                    reason = "behavior_threshold" if values["gru"] >= cfg["thresholds"]["gru"] else "below_threshold"
+                    reason = (
+                        "behavior_threshold"
+                        if values["gru"] >= cfg["thresholds"]["gru"]
+                        else "below_threshold"
+                    )
         disposition = "allow" if reason == "below_threshold" else "review"
         if p["permission"] == "deny":
             reason, disposition = "permission_denied", "deny"

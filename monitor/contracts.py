@@ -1,8 +1,18 @@
 """Wire contract for a trusted tool host. IDs and sequence numbers route events only."""
+
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-FIELDS = ("tool", "operation", "classification", "destination", "scope", "permission", "state")
+FIELDS = (
+    "tool",
+    "operation",
+    "classification",
+    "destination",
+    "scope",
+    "permission",
+    "state",
+)
 WINDOW = 12
 
 
@@ -13,7 +23,9 @@ class Event(BaseModel):
     tenant: str = Field(min_length=1, max_length=96)
     seq: int = Field(ge=1)
     tool: Literal["search", "read", "summarize", "stage", "submit"]
-    operation: Literal["lookup", "amend", "fetch", "compose", "case_summary", "bulletin", "upload"]
+    operation: Literal[
+        "lookup", "amend", "fetch", "compose", "case_summary", "bulletin", "upload"
+    ]
     classification: Literal["catalog", "case", "restricted", "draft"]
     destination: Literal["local", "case_portal"]
     scope: Literal["case", "related_lookup", "outside"]
