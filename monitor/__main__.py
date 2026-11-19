@@ -1,6 +1,8 @@
 import argparse
 from pathlib import Path
 
+from .airs import MODES
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -11,7 +13,7 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument(
         "--airs",
-        choices=["offline", "fixture-allow", "fixture-block", "live"],
+        choices=MODES,
         default="offline",
     )
     args = ap.parse_args()
