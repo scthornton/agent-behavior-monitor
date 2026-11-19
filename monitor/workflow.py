@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from .airs import inspect
-from .contracts import Event, Request
+from .contracts import MAX_HISTORY, Event, Request
 
 # Registry and case assignment belong to the host.
 RECORDS = {
@@ -96,19 +96,31 @@ class Workspace:
         return "completed"
 
     def step(self, call, score=None, airs="offline"):
-        """score is a bounded local or HTTP decision client. None is reference capture."""
+        """score is a bounded local or HTTP decision client. None is reference capture.
+
+        Every proposal gets exactly one terminal event. A fault in the decision client
+        or a session too long for the wire contract ends in a hold, never in dispatch.
+        """
         proposal = self.proposal(call)
-        request = Request(proposed=proposal, history=list(self.history))
+        request = None
+        if len(self.history) <= MAX_HISTORY:
+            request = Request(proposed=proposal, history=list(self.history))
         self.events.append(proposal)
         verdict = {"source": "offline", "action": "unavailable"}
-        if proposal.permission == "deny":
-            state = "denied"
-        else:
-            disposition = "allow"
-            if score is not None:
+        state = "failed"
+        try:
+            if proposal.permission == "deny":
+                disposition = "deny"
+            elif request is None:
+                # Nothing can score a session the wire contract cannot carry.
+                disposition = "review"
+            elif score is None:
+                disposition = "allow"
+            else:
                 try:
                     disposition = score(request)["disposition"]
-                except (TimeoutError, ConnectionError):
+                except Exception:  # noqa: BLE001 - fail closed on any fault
+                    # Timeouts, transport errors and malformed replies all hold the call.
                     disposition = "review"
             if disposition == "allow" and call.tool == "submit":
                 verdict = inspect(self.staged, airs)
@@ -120,7 +132,10 @@ class Workspace:
                 state = self.execute(call)
             else:
                 state = "denied" if disposition == "deny" else "held"
-        terminal = proposal.model_copy(update={"seq": proposal.seq + 1, "state": state})
-        self.events.append(terminal)
-        self.history.append(terminal)
+        finally:
+            terminal = proposal.model_copy(
+                update={"seq": proposal.seq + 1, "state": state}
+            )
+            self.events.append(terminal)
+            self.history.append(terminal)
         return request, terminal, verdict
