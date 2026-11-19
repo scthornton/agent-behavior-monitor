@@ -15,7 +15,13 @@ def main():
     args.add_argument("--out", type=Path, default=Path("run"))
     args.add_argument("--port", type=int, default=8765)
     opts = args.parse_args()
-    with (opts.out / "sessions.jsonl").open() as f:
+    source = opts.out / "sessions.jsonl"
+    if not source.exists():
+        raise SystemExit(
+            f"{source} not found. The reference folder ships models only. "
+            f"Run `python -m monitor generate --out {opts.out}` first."
+        )
+    with source.open() as f:
         cases = [s for line in f if (s := json.loads(line))["split"] == "test"]
     decisions = [(s, i) for s in cases for i in range(len(s["labels"]))]
     samples = random.Random(1741).sample(decisions, 260)
@@ -40,8 +46,8 @@ def main():
         "seed": 1741,
         "warmup": 20,
         "samples": 240,
-        "p50_ms": p50,
-        "p95_ms": p95,
+        "p50_ms": float(p50),
+        "p95_ms": float(p95),
     }
     (opts.out / "http-latency.json").write_text(json.dumps(report, indent=2) + "\n")
     print(report)
