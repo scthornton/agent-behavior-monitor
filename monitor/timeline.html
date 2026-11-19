@@ -40,9 +40,9 @@ function render(){
    [label,score==null?"unavailable":score.toFixed(5),cutoff.toFixed(5),score==null?"unavailable":flag?"Review":"Below cutoff"].forEach(v=>tr.insertCell().textContent=v);
    if(flag)tr.lastChild.className="flag";
  }
- get("decision").textContent="Behavior policy: "+d.disposition+" ("+d.reason+"). Reference replay outcome: "+row.reference_outcome+".";
- const baseline=runs[0].steps[index].decision.evidence;
- const changes=d.evidence.filter((e,i)=>e.scope!==baseline[i].scope||e.classification!==baseline[i].classification);
+ get("decision").textContent="Behavior policy: "+d.disposition+" ("+(d.reasons&&d.reasons.length?d.reasons.join(", "):d.reason)+"). Reference replay outcome: "+row.reference_outcome+".";
+ const baseline=(runs[0].steps[index]||row).decision.evidence;
+ const changes=d.evidence.filter((e,i)=>{const b=baseline[i]||{};return e.scope!==b.scope||e.classification!==b.classification});
  get("difference").textContent=changes.length
    ?"Compared with the case-only session, event "+changes.map(e=>e.seq).join(", ")+" records a restricted read under the related-case lookup grant."
    :"The observed history at this decision matches the case-only session.";
