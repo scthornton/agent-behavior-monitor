@@ -14,6 +14,7 @@ FIELDS = (
     "state",
 )
 WINDOW = 12
+MAX_HISTORY = 1024  # terminal events one request may carry
 
 
 class Event(BaseModel):
@@ -21,7 +22,7 @@ class Event(BaseModel):
     version: Literal[1]
     session: str = Field(min_length=1, max_length=96)
     tenant: str = Field(min_length=1, max_length=96)
-    seq: int = Field(ge=1)
+    seq: int = Field(ge=1, strict=True)
     tool: Literal["search", "read", "summarize", "stage", "submit"]
     operation: Literal[
         "lookup", "amend", "fetch", "compose", "case_summary", "bulletin", "upload"
@@ -36,7 +37,7 @@ class Event(BaseModel):
 class Request(BaseModel):
     model_config = ConfigDict(extra="forbid")
     proposed: Event
-    history: list[Event] = Field(max_length=1024)
+    history: list[Event] = Field(max_length=MAX_HISTORY)
 
     @model_validator(mode="after")
     def check_stream(self):
