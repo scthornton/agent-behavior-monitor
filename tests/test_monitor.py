@@ -1,6 +1,7 @@
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +17,7 @@ from monitor.contracts import Request
 from monitor.experiment import Bundle, calibrate, sessions, train
 from monitor.fixtures import FAMILIES, generate, replay
 from monitor.models import FIELDS, Encoder, examples, fields
-from monitor.service import Scorer, create_app
+from monitor.service import MAX_BODY, Scorer, create_app
 from monitor.workflow import Call, Workspace
 
 
@@ -225,6 +226,20 @@ def test_http_decision_boundary(run_dir):
         assert (
             bad.json()["reason"] == "history_incomplete" and bad.json()["score"] is None
         )
+        # Malformed and oversized bodies are refused cleanly and never echoed back.
+        text, headers = json.dumps(body), {"Content-Type": "application/json"}
+        nan = api.post(
+            "/score", content=text.replace('"seq": 29', '"seq": NaN'), headers=headers
+        )
+        assert nan.status_code == 422 and "NaN" not in nan.text
+        quoted = dict(body, proposed=dict(body["proposed"], seq="29"))
+        assert api.post("/score", json=quoted).status_code == 422
+        reordered = api.post("/score", json=dict(body, history=body["history"][::-1]))
+        assert reordered.status_code == 422 and "tenant" not in reordered.text
+        padding = b" " * (MAX_BODY + 1)
+        assert api.post("/score", content=padding, headers=headers).status_code == 413
+        chunks = (b" " * 65536 for _ in range(MAX_BODY // 65536 + 2))
+        assert api.post("/score", content=chunks, headers=headers).status_code == 413
         body["history"][0]["tenant"] = "wrong"
         assert api.post("/score", json=body).status_code == 422
 
@@ -278,3 +293,47 @@ def test_full_trace_overlap_and_first_decisions(corpus):
             unique.add(tuple(fields(e) for e in s["events"]))
         assert all(unique.isdisjoint(other) for other in traces.values())
         traces[split] = unique
+
+
+def test_decision_client_faults_hold():
+    def broken(_):
+        raise RuntimeError("scorer exploded")
+
+    def slow(_):
+        raise httpx.ReadTimeout("fixture")
+
+    replies = (broken, slow, lambda _: {"score": 0.0}, lambda _: {"disposition": "OK"})
+    for client in replies:
+        w = Workspace("t", "s")
+        _, end, _ = w.step(Call("read", "cover"), client)
+        assert end.state == "held" and not w.cache
+        # The stream stays well formed, so the session can continue.
+        _, end, _ = w.step(Call("read", "cover"))
+        assert end.state == "completed" and [e.seq for e in w.events] == [1, 2, 3, 4]
+
+
+def test_overlong_session_holds_without_scoring(monkeypatch):
+    monkeypatch.setattr("monitor.workflow.MAX_HISTORY", 2)
+    seen = []
+
+    def client(request):
+        seen.append(request)
+        return {"disposition": "allow"}
+
+    w = Workspace("t", "s")
+    states = [w.step(Call("search"), client)[1].state for _ in range(3)]
+    request, end, _ = w.step(Call("search"), client)
+    assert states == ["completed"] * 3 and len(seen) == 3
+    assert request is None and end.state == "held"
+
+
+def test_concurrent_requests_wait_for_the_scorer(bundle):
+    req, _, _ = request_at_upload(1)
+    sc = Scorer(bundle)
+    try:
+        with ThreadPoolExecutor(8) as pool:
+            decisions = list(pool.map(lambda _: sc.decide(req), range(160)))
+    finally:
+        sc.close()
+    outcomes = {(d["disposition"], d["reason"]) for d in decisions}
+    assert outcomes == {("allow", "below_threshold")}
