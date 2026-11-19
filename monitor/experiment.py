@@ -41,12 +41,12 @@ def by_session(values, traces):
     assert offset == len(values)
 
 
-def calibrate(values, val):
+def calibrate(values, val, budget=BUDGET):
     peaks = [max(v) for s, v in by_session(values, val) if s["first"] is None]
     # Scores are rounded to five decimals everywhere. Move one unit past the
     # disallowed order statistic, including when all scores are tied at zero.
     peaks.sort(reverse=True)
-    cutoff = round(peaks[int(len(peaks) * BUDGET)] + 0.00001, 5)
+    cutoff = round(peaks[int(len(peaks) * budget)] + 0.00001, 5)
     return cutoff
 
 
@@ -241,3 +241,92 @@ def evaluate(out):
                 for key in ("timely", "risky", "flagged", "benign", "tp", "fp", "fn")
             },
         )
+
+
+def robustness(out, count):
+    """Show how far one seed and one budget generalize: retrain under other training
+    seeds on the same sessions, then sweep the alert budget for the frozen models."""
+    fit, val, test = (sessions(out, s, "main") for s in ("train", "validation", "test"))
+    enc = Encoder.fit(fit)
+    rows = [list(examples(t)) for t in (fit, val, test)]
+    y = np.array([label for _, _, label in rows[0]], np.float32)
+    seeds = [SEED, *range(1, count)]
+    runs = []
+    for kind in ("gru", "shuffled"):
+        x_fit, x_val, x_test = (matrix(enc, r, kind) for r in rows)
+        for seed in seeds:
+            model = train_model(kind, x_fit, y, seed)
+            held = predict(model, x_val).astype(float).round(5)
+            cutoff = calibrate(held, val)
+            m = metrics(predict(model, x_test).astype(float).round(5), test, cutoff)
+            runs.append(
+                {
+                    "kind": kind,
+                    "seed": seed,
+                    "cutoff": cutoff,
+                    "validation_benign_per_100": metrics(held, val, cutoff)[
+                        "benign_per_100"
+                    ],
+                    "timely": m["timely"],
+                    "risky": m["risky"],
+                    "benign_per_100": m["benign_per_100"],
+                    "tp": m["tp"],
+                    "fn": m["fn"],
+                    "timely_by_family": {
+                        f: v["timely"] for f, v in m["families"].items()
+                    },
+                }
+            )
+            print(
+                kind, "seed", seed, "timely", m["timely"], "of", m["risky"], flush=True
+            )
+    summary = {}
+    for kind in ("gru", "shuffled"):
+        mine = [r for r in runs if r["kind"] == kind]
+        timely = [r["timely"] for r in mine]
+        benign = [r["benign_per_100"] for r in mine]
+        summary[kind] = {
+            "seeds": len(mine),
+            "risky": mine[0]["risky"],
+            "timely_mean": float(np.mean(timely)),
+            "timely_min": min(timely),
+            "timely_max": max(timely),
+            "seeds_catching_all": sum(t == mine[0]["risky"] for t in timely),
+            "benign_per_100_mean": float(np.mean(benign)),
+            "benign_per_100_max": max(benign),
+            "seeds_over_budget": sum(b > 100 * BUDGET for b in benign),
+        }
+    frozen = Bundle(out / "main")
+    held = {k: scores(k, frozen.models.get(k), frozen.enc, rows[1]) for k in NAMES}
+    final = {k: scores(k, frozen.models.get(k), frozen.enc, rows[2]) for k in NAMES}
+    sweep = []
+    for budget in (0.0, 0.02, 0.05, 0.08, 0.09, 0.10, 0.125, 0.15, 0.20):
+        point = {"budget_per_100": round(100 * budget, 2)}
+        for k in NAMES:
+            cutoff = calibrate(held[k], val, budget)
+            m = metrics(final[k], test, cutoff)
+            point[k] = {
+                "cutoff": cutoff,
+                "timely": m["timely"],
+                "benign_per_100": m["benign_per_100"],
+            }
+        sweep.append(point)
+    save(
+        out / "robustness.json",
+        {
+            "seed": SEED,
+            "training_seeds": seeds,
+            "target_per_100": 100 * BUDGET,
+            "host": {
+                "arch": platform.machine(),
+                "system": platform.system(),
+                "tensorflow": tf.__version__,
+                "keras": tf.keras.__version__,
+            },
+            "summary": summary,
+            "budget_sweep": sweep,
+            "runs": runs,
+        },
+    )
+    for kind, value in summary.items():
+        print(kind, value)

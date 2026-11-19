@@ -95,8 +95,8 @@ def rule(history, p, window=WINDOW):
     return 0.0
 
 
-def make_model(kind, width):
-    tf.keras.utils.set_random_seed(SEED)
+def make_model(kind, width, seed=SEED):
+    tf.keras.utils.set_random_seed(seed)
     if kind == "current":
         inputs = tf.keras.Input((width,))
         state = tf.keras.layers.Dense(20, activation="relu")(inputs)
@@ -133,9 +133,9 @@ def predict(model, x):
     )
 
 
-def train_model(kind, x, labels):
-    model = make_model(kind, x.shape[-1])
-    rng = np.random.default_rng(SEED)
+def train_model(kind, x, labels, seed=SEED):
+    model = make_model(kind, x.shape[-1], seed)
+    rng = np.random.default_rng(seed)
     for epoch in range(12):
         order = rng.permutation(len(x))
         for start in range(0, len(x), 128):
