@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from monitor import airs
 from monitor.airs import inspect
 from monitor.contracts import Request
 from monitor.experiment import Bundle, calibrate, sessions, train
@@ -28,10 +29,15 @@ def request_at_upload(case):
 
 @pytest.fixture(autouse=True)
 def no_live_credentials(monkeypatch):
-    """Tests never see real Prisma AIRS credentials, whatever the shell exports."""
+    """Tests never see real credentials or the network, whatever the shell exports."""
     for name in list(os.environ):
         if name.startswith(("AIRS_", "PANW_", "PRISMA_AIRS_")):
             monkeypatch.delenv(name)
+
+    def blocked(*args, **kwargs):
+        raise AssertionError("tests must not reach the network")
+
+    monkeypatch.setattr(airs.httpx, "post", blocked)
 
 
 @pytest.fixture(scope="session")
@@ -156,38 +162,86 @@ def staged_workspace():
 def test_unavailable_airs_never_means_allow():
     w = staged_workspace()
     _, end, v = w.step(Call("submit"), airs="live")
-    assert v == {"source": "live", "action": "unavailable"}
+    assert v == {
+        "source": "live",
+        "action": "unavailable",
+        "reason": "missing_credentials",
+    }
     assert end.state == "held" and not w.portal
     w = staged_workspace()
     _, end, v = w.step(Call("submit"), airs="fixture-block")
     assert v["source"] == "simulated" and end.state == "denied" and not w.portal
     w = staged_workspace()
     _, end, v = w.step(Call("submit"))
-    assert v == {"source": "offline", "action": "unavailable"}
+    assert v == {"source": "offline", "action": "unavailable", "reason": "offline_mode"}
     assert end.state == "completed" and len(w.portal) == 1
+    # A mistyped mode is refused before anything is recorded.
+    w = staged_workspace()
+    recorded = len(w.events)
+    with pytest.raises(ValueError):
+        w.step(Call("submit"), airs="fixture")
+    assert len(w.events) == recorded
 
 
 def test_live_wire_with_transport_double(monkeypatch):
-    monkeypatch.setenv("AIRS_API_KEY", "fixture")
-    monkeypatch.setenv("AIRS_PROFILE", "sample")
+    sent = []
 
-    def fake(url, *, json, headers, timeout):
-        assert url.endswith("/v1/scan/sync/request") and headers == {
-            "x-pan-token": "fixture"
-        }
-        assert json == {
-            "ai_profile": {"profile_name": "sample"},
-            "contents": [{"response": "synthetic"}],
-        }
-        return httpx.Response(
-            200, json={"action": "block"}, request=httpx.Request("POST", url)
-        )
+    def reply(status, payload):
+        def post(url, *, json, headers, timeout):
+            sent.append((url, json, headers))
+            return httpx.Response(
+                status, json=payload, request=httpx.Request("POST", url)
+            )
+
+        return post
 
     def timeout(*args, **kwargs):
         raise httpx.ReadTimeout("fixture")
 
-    assert inspect("synthetic", "live", fake)["action"] == "block"
-    assert inspect("synthetic", "live", timeout)["action"] == "unavailable"
+    block = reply(200, {"action": "block", "category": "malicious", "scan_id": "s-1"})
+    # Without a profile nothing is sent, and the reason says why.
+    monkeypatch.setenv("PANW_AI_SEC_API_KEY", "fixture")
+    assert inspect("synthetic", "live", block)["reason"] == "missing_credentials"
+    monkeypatch.setenv("PRISMA_AIRS_AI_PROFILE", "sample")
+    verdict = inspect("synthetic", "live", block, tr_id="s-29", session="s")
+    assert verdict == {
+        "source": "live",
+        "action": "block",
+        "reason": "verdict",
+        "category": "malicious",
+        "scan_id": "s-1",
+    }
+    assert sent == [
+        (
+            "https://service.api.aisecurity.paloaltonetworks.com/v1/scan/sync/request",
+            {
+                "ai_profile": {"profile_name": "sample"},
+                "contents": [{"response": "synthetic"}],
+                "metadata": {"app_name": "agent-behavior-monitor"},
+                "tr_id": "s-29",
+                "session_id": "s",
+            },
+            {"x-pan-token": "fixture"},
+        )
+    ]
+    # Every failure is unavailable, with a reason a person can act on.
+    assert inspect("synthetic", "live", timeout)["reason"] == "timeout"
+    assert inspect("synthetic", "live", reply(401, {}))["reason"] == "http_401"
+    odd = reply(200, {"action": "maybe"})
+    assert inspect("synthetic", "live", odd) == airs.unavailable("unusable_response")
+    # A regional scan host is accepted. Any other host never receives the key.
+    monkeypatch.setenv("AIRS_API_ENDPOINT", "https://service-de" + airs.SUFFIX)
+    assert inspect("synthetic", "live", block)["action"] == "block"
+    assert sent[-1][0].startswith("https://service-de.api.aisecurity.")
+    for bad in (
+        "https://example.com",
+        "http://service" + airs.SUFFIX,
+        "https://x.test/" + airs.SUFFIX,
+    ):
+        monkeypatch.setenv("AIRS_API_ENDPOINT", bad)
+        before = len(sent)
+        assert inspect("synthetic", "live", block)["reason"] == "endpoint_rejected"
+        assert len(sent) == before
 
 
 def test_timeout_holds_and_denial_wins(monkeypatch):
@@ -388,3 +442,30 @@ def test_hold_stops_the_session(bundle):
         assert (d["disposition"], d["reason"]) == ("review", "session_held")
     finally:
         sc.close()
+
+
+def test_content_check_separates_what_metadata_cannot():
+    # A rule-only decision client keeps this independent of any trained weights.
+    stub = SimpleNamespace(
+        config={"version": "stub", "thresholds": {"gru": 0.5, "rule": 0.00001}},
+        one=lambda kind, history, p: rule(history, p) if kind == "rule" else 0.0,
+    )
+    sc = Scorer(stub)
+    outcomes = {}
+    try:
+        for case in (1, 0, 2):  # case material only, outside included, outside excluded
+            w = Workspace("demo", f"case-{case}")
+            for call in plan("catalog_check", 0, "scope", case):
+                _, end, verdict = w.step(call, sc.decide, "fixture-pattern")
+                if w.stopped:
+                    break
+            outcomes[case] = (end.tool, end.state, verdict["action"], len(w.portal))
+    finally:
+        sc.close()
+    # Both sessions that read the outside record look identical to every detector.
+    # The content check blocks the one that carries it. The other stays held.
+    assert outcomes == {
+        1: ("submit", "completed", "allow", 1),
+        0: ("submit", "denied", "block", 0),
+        2: ("submit", "held", "allow", 0),
+    }
