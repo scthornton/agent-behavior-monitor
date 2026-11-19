@@ -2,6 +2,8 @@
 
 On three held-out workflow layouts, both history rules and the ordered GRU caught all 72 risky sessions at their first consequential proposal. The current-call model caught none at the declared alert budget. The ordered GRU missed eight follow-up uploads that the rules caught. Shuffling the history preserved first-decision detection. This experiment demonstrates the value of earlier events but provides no measured advantage for learning their order.
 
+These are results for one training seed and one alert budget. Across twelve seeds the ordered GRU caught between 48 and 72, so read its row below as a best case. [Robustness checks after release](#robustness-checks-after-release)
+
 ## Held-out sessions
 
 All four methods scored the same 5,016 proposals from 360 sessions. There were 96 positive decisions. The 72 first consequential decisions comprised 24 out-of-case submissions, 24 repeated forbidden reads and 24 unapproved changes of work product at staging. The other 24 positives were subsequent submissions of that changed work product. The host denied every forbidden read independently of the model. Detection credit on those 24 retries measures an escalation signal.
@@ -57,3 +59,46 @@ The independently timed runs reflect machine scheduling and are sensitive to loa
 A layout is the split unit. All variants, paired sessions and families of one layout share a split. Among the 600 training, 240 validation and 360 test sessions, there were 465, 192 and 288 distinct full metadata traces respectively. No full metadata trace occurred in two splits. Repeated benign prefixes and paired identical observations within a split are intentional. The ten authored layouts reuse the same five tools, catalog, small permission vocabulary and business rules. Counts reflect fixtures and should not be treated as independent customer samples.
 
 The main result supports keeping the history rule as the reference implementation for these conditions. The learned model transfers to new scripted layouts for familiar conditions and fails the unseen-family test. Customer false-alert rates, utility of human review, attacker adaptation, missing telemetry and the incremental benefit of live content inspection remain open. Measuring those requires independently labeled operational traces and actual traffic prevalence.
+
+## Robustness checks after release
+
+The numbers above come from one training seed and one alert budget. Three follow-up checks change how they should be read. `python -m monitor robustness` reproduces the first two. [Seed and budget results](../reference/robustness.json)
+
+**Training seed.** Both sequence models were retrained under twelve seeds on the same sessions, with the same recipe and the same calibration.
+
+| Model | Seeds catching all 72 | Timely range | Mean | Test benign alerts / 100 | Seeds over 10 / 100 on test |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Ordered GRU | 1 of 12 | 48 to 72 | 59.3 | 2.8 to 11.1 | 1 |
+| Shuffled GRU | 11 of 12 | 71 to 72 | 71.9 | 8.7 to 15.6 | 9 |
+
+The shipped seed, 1741, is the only one where the ordered GRU catches every risky session. Its out-of-case detections clear the cutoff by as little as 0.007 (0.32379 against 0.31668). Repeated-access detection holds at 24/24 on every seed. The losses are in the out-of-case family (8 to 24 of 24) and the task-change family (16 to 24 of 24), on layouts the model did not train on. The shuffled model is steadier on detection because it cannot memorize the order of the five training layouts, but its validation budget does not hold on the test layouts. A separate one-off check of six seeds found none at 72/72 after 30 or 60 epochs, with validation loss higher at 60 epochs than at 12 for every seed while training loss kept falling. Longer training is not the remedy.
+
+**Alert budget.** The frozen shipped models were re-calibrated at other budgets. Each cell is timely detections, then test benign alerts per 100.
+
+| Budget / 100 benign | Rules | Current call | Ordered GRU | Shuffled GRU |
+| ---: | ---: | ---: | ---: | ---: |
+| 5 | 48/72 at 0.00 | 0/72 at 0.00 | 55/72 at 4.51 | 65/72 at 5.90 |
+| 8 | 48/72 at 0.00 | 0/72 at 0.00 | 61/72 at 5.56 | 71/72 at 7.99 |
+| 9 | 72/72 at 8.33 | 0/72 at 0.00 | 68/72 at 6.94 | 72/72 at 8.68 |
+| 10 | 72/72 at 8.33 | 0/72 at 0.00 | 72/72 at 8.33 | 72/72 at 8.68 |
+| 15 | 72/72 at 8.33 | 0/72 at 0.00 | 72/72 at 10.76 | 72/72 at 16.67 |
+
+The rules step from 48 to 72 between 8 and 9 because the ambiguous clean uploads are 8.33% of benign sessions by design. A budget below that share removes out-of-case detection for every method. The 72/72 result depends on the authored case mix as much as on any detector.
+
+**History window.** Every detector in the comparison reads the last 12 terminal events. In the shipped test split the evidence is never more than 11 events back, so the window does not show in the results. It shows as soon as a session is longer. These were measured on the release commit, before the service changes below.
+
+- Ten routine lookups between the restricted read and the summary put the read out of view. The rule scored 0.00 and the ordered GRU 0.06 on an upload that carried the restricted text.
+- An approved amendment more than 12 events back when the bulletin is staged drew a false alert from the rule (0.95) and from the GRU (0.98).
+- Regenerating the corpus under other data seeds produced both errors with no adversary. Two of five alternative seeds gave the rules 71/72 with one more benign session flagged.
+- After a review hold, six routine lookups and a second submit scored 0.03, and the upload completed.
+
+## What the scoring service does about it
+
+The comparison above is unchanged. The service and the replay host now decide differently from the experiment in four ways.
+
+- The history rule is also evaluated over the whole session. The service reviews when that rule or the GRU asks for it. The model can add a hold and cannot remove one.
+- A session that contains a hold or a content block is held from then on, in the service and in the host.
+- A scorer fault, a timeout or an over-long session holds the call. Concurrent requests wait for the scorer instead of being held.
+- Content inspection is consulted on an upload that the behavior policy allows or sends to review. A block wins and an allow never releases a hold.
+
+One limit remains and is pinned by a test. The GRU still reads 12 events, so an approved amendment that scrolled out of its window can draw a review from the model. That errs toward a hold.

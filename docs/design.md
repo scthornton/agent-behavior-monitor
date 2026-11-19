@@ -39,3 +39,13 @@ The direct PAN endpoint-reference link returned HTTP 404 during research. The of
 Both learned classifiers used a sigmoid output, Adam at 0.004, 12 epochs, shuffled batches of 128 and a 6:1 positive-to-negative loss weight to give the sparse positive decisions more influence. The current-only head used 20 ReLU units. The sequence head used 20 GRU units. Training did not search a hyperparameter grid. Class weighting and the synthetic case mix affect the numerical scores. Compare methods at their frozen cutoffs.
 
 Each field gets its own one-hot vocabulary and an unknown slot. A real event activates one position per field. The ordered GRU receives up to 12 terminal records followed by the proposal and then zero padding. For the ablation, canonically sort the earlier records, use a seed derived from that multiset and the experiment seed to permute them, then append the proposal. This makes every original ordering of the same history multiset produce identical ablation input. The separate ablation model learns and calibrates on this same transformation.
+
+## Amendments after review, 2026-11-19
+
+The sections above are the plan as written before implementation and are left unchanged. A review of the release found gaps between that plan and the gate. These points now differ.
+
+- Step 3 scores up to 12 previous events. The service additionally evaluates the history rule over the full session, because a fixed window lets routine calls push evidence out of view.
+- Step 4 named the GRU threshold as the deployed decision. The service now reviews when the full-session rule or the GRU asks for it, so the rule is the floor.
+- Step 5 said review is a stop with no automatic release. Only the demo loop enforced that. The service and the host now hold every later call in a session that contains a hold or a content block.
+- Content inspection ran only after behavior allowed a submit. It now also runs when behavior asks for review, since that is where two sessions with identical metadata can differ. A block wins and an allow never releases a hold.
+- The comparison used one training seed. `python -m monitor robustness` adds twelve seeds and a budget sweep. The results are in the findings.
