@@ -50,7 +50,7 @@ function render(){
  for(const e of d.evidence){const tr=get("history").insertRow();[e.seq,e.tool,e.operation,e.classification,e.scope,e.state].forEach(v=>tr.insertCell().textContent=v)}
  if(!d.evidence.length)get("history").insertRow().insertCell().textContent="First proposal";
  get("truth").textContent="The staged synthetic summary used: "+run.sources.join(", ")+". This source list was withheld from all detectors.";
- get("result").textContent="Enforcement ended at "+run.guarded_last.tool+" ("+run.guarded_last.state+"). Portal entries: "+run.submissions+". AIRS: "+run.airs.source+" / "+run.airs.action+".";
+ get("result").textContent="Enforcement ended at "+run.guarded_last.tool+" ("+run.guarded_last.state+"). Portal entries: "+run.submissions+". Content inspection: "+run.airs.source+" / "+run.airs.action+" ("+run.airs.reason+").";
  get("back").disabled=index===0;get("next").disabled=index===run.steps.length-1;
 }
 get("which").onchange=render;get("step").oninput=render;
