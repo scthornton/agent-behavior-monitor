@@ -50,6 +50,7 @@ def demo(out, airs):
                     "sources": list(ws.staged_sources),
                     "guarded_last": terminal.model_dump(),
                     "airs": verdict,
+                    "airs_mode": airs,
                     "submissions": len(guarded.portal),
                 }
             )
@@ -58,6 +59,8 @@ def demo(out, airs):
                 trace[-1]["decision"]["scores"],
                 "guarded",
                 terminal.state,
+                "content",
+                verdict["action"],
                 "portal entries",
                 len(guarded.portal),
             )

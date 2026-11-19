@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from .airs import inspect
+from .airs import MODES, inspect
 from .contracts import MAX_HISTORY, Event, Request
 
 # Registry and case assignment belong to the host.
@@ -103,20 +103,23 @@ class Workspace:
         or a session too long for the wire contract ends in a hold, never in dispatch.
         A review hold or a content block stops the session: later calls are held too.
         """
+        if airs not in MODES:
+            raise ValueError("unknown AIRS mode")
         proposal = self.proposal(call)
         request = None
         if len(self.history) <= MAX_HISTORY:
             request = Request(proposed=proposal, history=list(self.history))
         self.events.append(proposal)
-        verdict = {"source": "offline", "action": "unavailable"}
+        verdict = {"source": "none", "action": "skipped", "reason": "not_consulted"}
+        consult = call.tool == "submit" and bool(self.staged)
         state = "failed"
         try:
             if proposal.permission == "deny":
-                disposition = "deny"
+                disposition, consult = "deny", False
             elif self.stopped or request is None:
                 # A hold is a stop with no automatic release. And nothing can score a
                 # session the wire contract cannot carry.
-                disposition = "review"
+                disposition, consult = "review", False
             elif score is None:
                 disposition = "allow"
             else:
@@ -125,8 +128,15 @@ class Workspace:
                 except Exception:  # noqa: BLE001 - fail closed on any fault
                     # Timeouts, transport errors and malformed replies all hold the call.
                     disposition = "review"
-            if disposition == "allow" and call.tool == "submit":
-                verdict = inspect(self.staged, airs)
+            if consult and disposition in ("allow", "review"):
+                # Content is checked on an upload the behavior policy allowed and on
+                # one it sent to review. A block wins. An allow never lifts a hold.
+                verdict = inspect(
+                    self.staged,
+                    airs,
+                    tr_id=f"{self.session}-{proposal.seq}",
+                    session=self.session,
+                )
                 if verdict["action"] == "block":
                     disposition = "deny"
                 elif airs != "offline" and verdict["action"] == "unavailable":
