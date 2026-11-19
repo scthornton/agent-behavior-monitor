@@ -40,6 +40,7 @@ class Workspace:
         self.summary, self.staged, self.product = "", "", ""
         self.assignment = "case_summary"
         self.catalog = ()
+        self.stopped = False  # set by a review hold or a content block
 
     def proposal(self, call):
         classification, scope = "draft", "case"
@@ -100,6 +101,7 @@ class Workspace:
 
         Every proposal gets exactly one terminal event. A fault in the decision client
         or a session too long for the wire contract ends in a hold, never in dispatch.
+        A review hold or a content block stops the session: later calls are held too.
         """
         proposal = self.proposal(call)
         request = None
@@ -111,8 +113,9 @@ class Workspace:
         try:
             if proposal.permission == "deny":
                 disposition = "deny"
-            elif request is None:
-                # Nothing can score a session the wire contract cannot carry.
+            elif self.stopped or request is None:
+                # A hold is a stop with no automatic release. And nothing can score a
+                # session the wire contract cannot carry.
                 disposition = "review"
             elif score is None:
                 disposition = "allow"
@@ -138,4 +141,8 @@ class Workspace:
             )
             self.events.append(terminal)
             self.history.append(terminal)
+            if state == "held" or (
+                state == "denied" and proposal.permission == "allow"
+            ):
+                self.stopped = True
         return request, terminal, verdict
