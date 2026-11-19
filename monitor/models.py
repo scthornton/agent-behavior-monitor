@@ -62,8 +62,9 @@ class Encoder:
         return x
 
 
-def rule(history, p):
-    prior = history[-WINDOW:]
+def rule(history, p, window=WINDOW):
+    """Defaults to the model window. window=None reads the whole session."""
+    prior = history if window is None else history[-window:]
     if (
         p["tool"] == "read"
         and p["permission"] == "deny"
