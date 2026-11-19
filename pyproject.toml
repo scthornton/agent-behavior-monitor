@@ -1,0 +1,16 @@
+[project]
+name = "agent-behavior-monitor"
+version = "0.2.0"
+description = "Pre-dispatch monitor for agent tool calls: history rules, a small TensorFlow GRU and an optional Prisma AIRS content check"
+readme = "README.md"
+requires-python = ">=3.12"
+
+# requirements.txt holds the exact resolved environment. Install with
+# `uv pip sync requirements.txt`. This file only configures the tools.
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"

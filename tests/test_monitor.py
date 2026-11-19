@@ -13,13 +13,11 @@ from pydantic import ValidationError
 
 from monitor.airs import inspect
 from monitor.contracts import Request
-from monitor.experiment import Bundle, calibrate, sessions
-from monitor.fixtures import FAMILIES, replay
+from monitor.experiment import Bundle, calibrate, sessions, train
+from monitor.fixtures import FAMILIES, generate, replay
 from monitor.models import FIELDS, Encoder, examples, fields
 from monitor.service import Scorer, create_app
 from monitor.workflow import Call, Workspace
-
-OUT = Path(os.environ.get("MONITOR_RUN", "run"))
 
 
 def request_at_upload(case):
@@ -27,9 +25,38 @@ def request_at_upload(case):
     return Request(history=ws.history[:-1], proposed=ws.events[-2]), ws, labels
 
 
-@pytest.fixture(scope="module")
-def bundle():
-    return Bundle(OUT / "main")
+@pytest.fixture(autouse=True)
+def no_live_credentials(monkeypatch):
+    """Tests never see real Prisma AIRS credentials, whatever the shell exports."""
+    for name in list(os.environ):
+        if name.startswith(("AIRS_", "PANW_", "PRISMA_AIRS_")):
+            monkeypatch.delenv(name)
+
+
+@pytest.fixture(scope="session")
+def run_dir(tmp_path_factory):
+    """Use MONITOR_RUN when it is set. Otherwise generate and train a private run."""
+    if os.environ.get("MONITOR_RUN"):
+        return Path(os.environ["MONITOR_RUN"])
+    out = tmp_path_factory.mktemp("run")
+    generate(out)
+    train(out)
+    return out
+
+
+@pytest.fixture(scope="session")
+def corpus(run_dir, tmp_path_factory):
+    """Generation is deterministic, so a folder that ships models only can rebuild it."""
+    if (run_dir / "sessions.jsonl").exists():
+        return run_dir
+    out = tmp_path_factory.mktemp("corpus")
+    generate(out)
+    return out
+
+
+@pytest.fixture(scope="session")
+def bundle(run_dir):
+    return Bundle(run_dir / "main")
 
 
 def test_controlled_upload_and_ambiguity(bundle):
@@ -75,7 +102,7 @@ def test_isolation(field):
     assert not right.cache and not right.events and not right.portal
 
 
-def test_future_terminal_and_hidden_fields():
+def test_future_terminal_and_hidden_fields(corpus):
     req, _, _ = request_at_upload(1)
     with pytest.raises(ValidationError):
         Request(
@@ -86,7 +113,7 @@ def test_future_terminal_and_hidden_fields():
         Request(proposed=req.history[-1], history=[])
     with pytest.raises(ValidationError):
         Request.model_validate({**req.model_dump(), "scenario": "secret"})
-    sample = sessions(OUT, "test", "main")[0]
+    sample = sessions(corpus, "test", "main")[0]
     rows = deepcopy(list(examples([sample])))
     i = len(rows) // 2
     sample["events"][2 * i + 1]["state"] = "failed"
@@ -182,9 +209,9 @@ def test_timeout_holds_and_denial_wins(monkeypatch):
         sc.close()
 
 
-def test_http_decision_boundary():
+def test_http_decision_boundary(run_dir):
     req, _, _ = request_at_upload(1)
-    with TestClient(create_app(OUT)) as api:
+    with TestClient(create_app(run_dir)) as api:
         body = req.model_dump()
         ok = api.post("/score", json=body)
         assert ok.status_code == 200 and ok.json()["disposition"] == "allow"
@@ -202,20 +229,26 @@ def test_http_decision_boundary():
         assert api.post("/score", json=body).status_code == 422
 
 
-def test_split_and_thresholds():
-    manifest = json.loads((OUT / "split.json").read_text())
+def test_split_and_thresholds(run_dir, corpus):
+    manifest = json.loads((corpus / "split.json").read_text())
     by_group = {}
     assert len({s["session"] for s in manifest}) == len(manifest)
     for s in manifest:
         assert by_group.setdefault(s["group"], s["split"]) == s["split"]
+    # A full run has every fold. The shipped reference folder has the main fold only.
+    trained = [f for f in ("main", *FAMILIES) if (run_dir / f / "config.json").exists()]
+    assert "main" in trained
+    assert len(trained) == 4 or not (run_dir / "sessions.jsonl").exists()
     for fold in ("main", *FAMILIES):
         fit, val, test = [
-            sessions(OUT, split, fold) for split in ("train", "validation", "test")
+            sessions(corpus, split, fold) for split in ("train", "validation", "test")
         ]
         if fold != "main":
             assert all(s["family"] != fold for s in fit + val)
             assert all(s["family"] == fold for s in test)
-        cfg = json.loads((OUT / fold / "config.json").read_text())
+        if fold not in trained:
+            continue
+        cfg = json.loads((run_dir / fold / "config.json").read_text())
         assert cfg["vocab"] == Encoder.fit(fit).vocab
         assert all(v["benign_per_100"] <= 10 for v in cfg["validation"].values())
     assert calibrate(np.array([1.0] * 10), [{"first": None, "labels": [0]}] * 10) > 1.0
@@ -230,11 +263,11 @@ def test_ablation_erases_order(bundle):
         assert np.array_equal(left, right) == (kind != "gru")
 
 
-def test_full_trace_overlap_and_first_decisions():
+def test_full_trace_overlap_and_first_decisions(corpus):
     traces = {}
     for split in ("train", "validation", "test"):
         unique = set()
-        for s in sessions(OUT, split, "main"):
+        for s in sessions(corpus, split, "main"):
             steps = [i for i, label in enumerate(s["labels"]) if label]
             assert s["first"] == (steps[0] if steps else None)
             if s["case"] == 0:

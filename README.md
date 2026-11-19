@@ -55,4 +55,6 @@ python -m monitor demo --out run
 MONITOR_RUN=run python -m pytest -q
 ```
 
+Without `MONITOR_RUN`, `python -m pytest -q` generates the sessions and trains every fold in a temporary folder first. That takes about a minute on a laptop CPU.
+
 The experiment uses synthetic records and an in-memory portal. It runs without an LLM account, GPU or Prisma AIRS credentials. The optional AIRS adapter was tested with simulated responses. [AIRS integration details](docs/design.md#runtime-path-and-trust)
