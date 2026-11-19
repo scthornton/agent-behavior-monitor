@@ -25,6 +25,8 @@ def demo(out, airs):
                 decision = scorer.decide(request)
                 trace.append(dict(proposed=request.proposed.model_dump(), decision=decision,
                                   reference_outcome=terminal.state))
+            if idx == 0:
+                save(out / "upload-request.json", request.model_dump())
             guarded = Workspace("demo", ws.session)
             for call in calls:
                 _, terminal, verdict = guarded.step(call, scorer.decide, airs)

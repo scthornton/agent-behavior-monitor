@@ -2,6 +2,7 @@
 import hashlib
 import json
 import platform
+import subprocess
 import time
 from pathlib import Path
 import numpy as np
@@ -134,10 +135,14 @@ def latency(bundle, rows):
             bundle.one(k, h, p)
             samples.append((time.perf_counter_ns()-start)/1e6)
         data[k] = dict(zip(("p50_ms", "p95_ms"), np.percentile(samples[20:], [50, 95])))
-    cpu = Path("/proc/cpuinfo").read_text()
-    model = next((line.split(":", 1)[1].strip() for line in cpu.splitlines()
-                  if line.startswith("model name")), platform.machine())
-    return dict(samples=240, warmup=20, cpu=model, arch=platform.machine(),
+    try:
+        info = json.loads(subprocess.check_output(["lscpu", "-J"], text=True))["lscpu"]
+        model = ", ".join(dict.fromkeys(row["data"] for row in info if row["field"] == "Model name:"))
+    except (OSError, KeyError, ValueError, subprocess.SubprocessError):
+        model = platform.processor()
+    product = Path("/sys/class/dmi/id/product_name")
+    return dict(samples=240, warmup=20, cpu=model or platform.machine(), arch=platform.machine(),
+                system=product.read_text().strip() if product.exists() else platform.system(),
                 tensorflow=tf.__version__, keras=tf.keras.__version__, timing=data)
 
 
