@@ -323,7 +323,14 @@ def test_split_and_thresholds(run_dir, corpus):
         cfg = json.loads((run_dir / fold / "config.json").read_text())
         assert cfg["vocab"] == Encoder.fit(fit).vocab
         assert all(v["benign_per_100"] <= 10 for v in cfg["validation"].values())
-    assert calibrate(np.array([1.0] * 10), [{"first": None, "labels": [0]}] * 10) > 1.0
+    ten = [{"first": None, "labels": [0]}] * 10
+    assert calibrate(np.array([1.0] * 10), ten) > 1.0
+    # A tighter budget moves the cutoff up the ranked benign sessions.
+    ranked = np.arange(10) / 10
+    assert (
+        calibrate(ranked, ten, 0.0) == 0.90001
+        and calibrate(ranked, ten, 0.2) == 0.70001
+    )
 
 
 def test_ablation_erases_order(bundle):
